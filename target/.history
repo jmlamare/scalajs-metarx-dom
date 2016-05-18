@@ -1,0 +1,19 @@
+reload
+reload plugins
+exit
+build
+compile
+exit
+compile
+exit
+compile
+fastOptJS
+gen-sublime
+exit
+gen-sublime
+fastOptJS
+compile
+fastOptJS
+~fastOptJS
+q
+exit
