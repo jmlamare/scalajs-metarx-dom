@@ -1,30 +1,30 @@
 package jml.example.scalajsrxdom
-
+ 
 import scala.scalajs.js
 import js.annotation.JSExport
 import org.scalajs.dom
 import scalatags.JsDom.all._
 import pl.metastack.metarx.{Array=>RxArray, _}
-
-
+ 
+ 
 object Scalajsrxdom extends js.JSApp {
-
-  implicit def RxMod[T <: scalatags.jsdom.Frag](channel: ReadChannel[T]): scalatags.JsDom.Modifier = {
-    return new scalatags.JsDom.Modifier() {
-      override def applyTo(b: org.scalajs.dom.Element): Unit = {
-        var node: org.scalajs.dom.Node = b.appendChild(
-          org.scalajs.dom.document.createComment("")
-        )
-        channel.attach( elem=> {
-          val next = elem.render
-          node.parentNode.replaceChild(next, node)
-          node = next
-        })
-        // MutationObserverInit()
-      }
+ 
+  implicit def RxVal[T <: scalatags.jsdom.Frag](channel: ReadChannel[T]): scalatags.JsDom.Frag = {
+    return new scalatags.JsDom.Frag() {
+      var node: org.scalajs.dom.Node = org.scalajs.dom.document.createComment("")
+      channel.attach( elem=> {
+        if( node.parentNode!=null ) {
+          val temp = elem.render
+          node.parentNode.replaceChild(temp, node)
+          node = temp
+        }
+        else node = elem.render
+      })
+      override def render = node
+      override def applyTo(b: org.scalajs.dom.Element): Unit = b.appendChild(node)
     }
   }
-
+ 
   implicit def RxBuf[T <: scalatags.jsdom.Frag](buffer: DeltaBuffer[T]): scalatags.JsDom.Modifier = {
     return new scalatags.JsDom.Modifier() {
       override def applyTo(b: org.scalajs.dom.Element): Unit = {
@@ -49,8 +49,8 @@ object Scalajsrxdom extends js.JSApp {
         }
       }
     }
-  }  
-
+  } 
+ 
   implicit def RxAttrValue[T: AttrValue] = new AttrValue[ReadChannel[T]]{
     def apply(elem: org.scalajs.dom.Element, attr: Attr, channel: ReadChannel[T]): Unit = {
       channel.attach( value =>
@@ -58,7 +58,7 @@ object Scalajsrxdom extends js.JSApp {
       )
     }
   }
-
+ 
   implicit def RxStyleValue[T: StyleValue] = new StyleValue[ReadChannel[T]]{
     def apply(elem: org.scalajs.dom.Element, style: Style, channel: ReadChannel[T]): Unit = {
       channel.attach( value=>
@@ -67,37 +67,129 @@ object Scalajsrxdom extends js.JSApp {
     }
   }
 
+  def lup[T](b:Array[Array[T]])(implicit frac: scala.math.Fractional[T], tag: scala.reflect.ClassTag[T]): Option[(Array[Array[T]], Array[Int])] = {
+    import frac._
+    val perm: Array[Int] = (0 to b.length-1).toArray
+    def get(lin:Int, col:Int): T = b(perm(lin))(col)
+    def set(lin:Int, col:Int, cell:T) = b(perm(lin))(col) = cell
+    for(pos<-0 to b.length-2) {
+      val max:Int = Range(pos, b.length-1).reduce((a,b)=>
+        if( get(a, pos)<get(b, pos) ) b else a
+      )
+      val (rp,rm) = (perm(pos), perm(max))
+      perm(pos)=rm
+      perm(max)=rp
+      if( frac.compare(get(pos, pos), frac.zero)==0 ) return None
+      for(r<-pos+1 to b.length-1) {
+        set(r, pos, get(r,pos) / get(pos, pos))
+        for(c<-pos+1 to b.length-1) set(r, c, get(r, c) - get(r, pos) * get(pos, c))
+      }
+    }
+    return if( frac.compare(get(b.length-1, b.length-1),frac.zero)==0 )  None else Some(b, perm)
+  }
+   
+  def solve[T](a:Array[Array[T]], b:Array[T])(implicit frac: scala.math.Fractional[T], tag: scala.reflect.ClassTag[T]): Option[Array[T]] = {
+    import frac._
+    lup(a) match {
+      case Some( (lu, p) ) => {
+        val y = Array.fill(b.length)(frac.zero)
+        val x = Array.fill(b.length)(frac.zero)
+        for(i <- Range(0,b.length)) y(i) = b(p(i)) - Range(0,i).map(j=>lu(i)(j) * y(j)).sum
+        for(i <- b.length-1 to 0 by -1) x(i) = (y(i) - Range(i+1,b.length).map(j=>lu(i)(j) * x(j)).sum) / lu(i)(i)
+        return Some(x)
+      }
+      case _ => return None
+    }
+  }
+ 
+  type MatrixSeq[T] = scala.collection.mutable.ArraySeq[T]
+ 
   def main(): Unit = {
-    val text = Var("HELLO")
-    val list = Buffer(1,2)
+    val list = Buffer(1,2,2,3)
+    val size = Var[Int](3)
+    
     dom.document.body.appendChild( div(
+      /*
       p(
-        text.map(span(_)), 
-        " - ",
         list.size.map(span(_))
       ),
-    	ul(
-        list.map(x=>li(
-          x.toString,
-          button(onclick := {
-            ()=> list -= x;
-          }, "DROP")
-        ))
-    	),
       button(
         id:="add-digit",
-        onclick :=  { 
+        onclick :=  {
           ()=> list += (list.get.foldLeft(0)(Math.max(_,_))+1)
         },
         "ADD DIGIT"
       ),
-      table(`class`:="table table-bordered",
-        list.map(x=> tr(td(x), td(x), td(x), td(x), td(x), td(x), td(x)))
-      )
-    ).render)
-    text := "HELLO WORLD"
+      ul(
+        list.map(x=>li(
+          x.toString,
+          button(
+            onclick := {
+              ()=> list -= x;
+            },
+            "DROP"
+          )
+        ))
+      ),
+      */
+      h2(
+        "Matrix Size ",
+        input(
+          "Size", 
+          value := size.get,
+          onchange := { (event: org.scalajs.dom.Event)=>
+            size := event.currentTarget.asInstanceOf[org.scalajs.dom.html.Input].value.toInt
+          }
+        )
+      ),
+      size.map(size =>{
+        val matrix: Dict[(Int,Int),Rational] = Dict((1 to size).flatMap(x=>(1 to size).map(y=>(x,y)->Rational(if(x==y) 1 else 0))).toMap)
+        val vector: Dict[Int, Rational] = Dict((1 to size).map(x=>x->Rational(x)).toMap)
+        val result = matrix.changes.foldLeft(Array.ofDim[Rational](size,size))((matrix,change)=> change match {
+          case pl.metastack.metarx.Dict.Delta.Insert((r,c),v)=>matrix.updated(r-1, matrix(r-1).updated(c-1, v))
+          case pl.metastack.metarx.Dict.Delta.Update((r,c),v)=>matrix.updated(r-1, matrix(r-1).updated(c-1, v))
+          case pl.metastack.metarx.Dict.Delta.Remove((r,c))=>matrix.updated(r-1, matrix(r).updated(c-1, Rational(0)))
+          case pl.metastack.metarx.Dict.Delta.Clear()=>Array.ofDim[Rational](size,size)
+        }).zip(vector.changes.foldLeft(Array.ofDim[Rational](size))((vector,change)=> change match {
+          case pl.metastack.metarx.Dict.Delta.Insert(r,v)=>vector.updated(r-1, v)
+          case pl.metastack.metarx.Dict.Delta.Update(r,v)=>vector.updated(r-1, v)
+          case pl.metastack.metarx.Dict.Delta.Remove(r)=>vector.updated(r-1, Rational(0))
+          case pl.metastack.metarx.Dict.Delta.Clear()=>Array.ofDim[Rational](size)
+        })).map { 
+          case (matrix, vector)=> solve(matrix.map(_.clone), vector)
+        }
+        table(`class`:="table table-bordered", (1 to size).map(row=>
+          tr(
+            (1 to size).map(col=>
+              td( display:="inline-block",
+                input( 
+                  value:=matrix.get.apply((row,col)).toString,
+                  onchange := { (event: org.scalajs.dom.Event)=> 
+                    matrix.update((row, col), Rational(event.currentTarget.asInstanceOf[org.scalajs.dom.html.Input].value.toInt))
+                  }
+                ),
+                " * x" + col + (if(col==size) "  " else " + ")
+              )
+            ),
+            td( display:="inline-block",
+              " = ",
+              input( 
+                value:=vector.get.apply(row).toString,
+                onchange := { (event: org.scalajs.dom.Event)=> 
+                  vector.update(row, Rational(event.currentTarget.asInstanceOf[org.scalajs.dom.html.Input].value.toInt))
+                }
+              )
+            ),
+            td( display:="inline-block",
+              "; x" + row + " = ",
+              result.map(r=>span(r.map(_.apply(row-1).toString)))
+            )
+          )
+        ))
+      })
+
+    ).render);
   }
-
+ 
 }
-
-
+ 
