@@ -69,13 +69,14 @@ object Scalajsrxdom extends js.JSApp {
 
   def lup[T](b:Array[Array[T]])(implicit frac: scala.math.Fractional[T], tag: scala.reflect.ClassTag[T]): Option[(Array[Array[T]], Array[Int])] = {
     import frac._
+    b.map(x=>println(x.mkString(",")))
+    println("--")
     val perm: Array[Int] = (0 to b.length-1).toArray
     def get(lin:Int, col:Int): T = b(perm(lin))(col)
     def set(lin:Int, col:Int, cell:T) = b(perm(lin))(col) = cell
     for(pos<-0 to b.length-2) {
-      val max:Int = Range(pos, b.length-1).reduce((a,b)=>
-        if( get(a, pos)<get(b, pos) ) b else a
-      )
+      val max:Int = Range(pos, b.length-1).maxBy(get(_,pos))
+      println(pos + "->" + max)
       val (rp,rm) = (perm(pos), perm(max))
       perm(pos)=rm
       perm(max)=rp
@@ -85,24 +86,20 @@ object Scalajsrxdom extends js.JSApp {
         for(c<-pos+1 to b.length-1) set(r, c, get(r, c) - get(r, pos) * get(pos, c))
       }
     }
-    return if( frac.compare(get(b.length-1, b.length-1),frac.zero)==0 )  None else Some(b, perm)
+    return if( frac.compare(get(b.length-1, b.length-1),frac.zero)==0 ) None else Some(b, perm)
   }
    
-  def solve[T](a:Array[Array[T]], b:Array[T])(implicit frac: scala.math.Fractional[T], tag: scala.reflect.ClassTag[T]): Option[Array[T]] = {
-    import frac._
-    lup(a) match {
-      case Some( (lu, p) ) => {
-        val y = Array.fill(b.length)(frac.zero)
-        val x = Array.fill(b.length)(frac.zero)
-        for(i <- Range(0,b.length)) y(i) = b(p(i)) - Range(0,i).map(j=>lu(i)(j) * y(j)).sum
-        for(i <- b.length-1 to 0 by -1) x(i) = (y(i) - Range(i+1,b.length).map(j=>lu(i)(j) * x(j)).sum) / lu(i)(i)
-        return Some(x)
-      }
-      case _ => return None
+  def solve[T](a:Array[Array[T]], b:Array[T])(implicit frac: scala.math.Fractional[T], tag: scala.reflect.ClassTag[T]): Option[Array[T]] = lup(a) match {
+    case Some( (lu, p) ) => {
+      import frac._
+      val y = Array.fill(b.length)(frac.zero)
+      val x = Array.fill(b.length)(frac.zero)
+      for(i <- Range(0,b.length)) y(i) = b(p(i)) - Range(0,i).map(j=>lu(i)(j) * y(j)).sum
+      for(i <- b.length-1 to 0 by -1) x(i) = (y(i) - Range(i+1,b.length).map(j=>lu(i)(j) * x(j)).sum) / lu(i)(i)
+      return Some(x)
     }
+    case _ => return None
   }
- 
-  type MatrixSeq[T] = scala.collection.mutable.ArraySeq[T]
  
   def main(): Unit = {
     val list = Buffer(1,2,2,3)
@@ -158,30 +155,34 @@ object Scalajsrxdom extends js.JSApp {
         })).map { 
           case (matrix, vector)=> solve(matrix.map(_.clone), vector)
         }
+
+        def handler[T](set:Dict[T, Rational], key:T) = {
+          (event: org.scalajs.dom.Event) => Rational.unapply(event.currentTarget.asInstanceOf[org.scalajs.dom.html.Input].value) match {
+            case Some(x) => set.update(key, x)
+            case None => event.currentTarget.asInstanceOf[org.scalajs.dom.html.Input].value = set.get.apply(key).toString
+          }
+        }
         table(`class`:="table table-bordered", (1 to size).map(row=>
           tr(
             (1 to size).map(col=>
               td( display:="inline-block",
-                input( 
+                input(
+                  width:="40px",
                   value:=matrix.get.apply((row,col)).toString,
-                  onchange := { (event: org.scalajs.dom.Event)=> 
-                    matrix.update((row, col), Rational(event.currentTarget.asInstanceOf[org.scalajs.dom.html.Input].value.toInt))
-                  }
+                  onchange:=handler(matrix, (row,col))
                 ),
-                " * x" + col + (if(col==size) "  " else " + ")
+                " * x" + col + (if(col==size) " = " else " + ")
               )
             ),
             td( display:="inline-block",
-              " = ",
               input( 
+                width:="40px",
                 value:=vector.get.apply(row).toString,
-                onchange := { (event: org.scalajs.dom.Event)=> 
-                  vector.update(row, Rational(event.currentTarget.asInstanceOf[org.scalajs.dom.html.Input].value.toInt))
-                }
+                onchange:=handler(vector, row)
               )
             ),
             td( display:="inline-block",
-              "; x" + row + " = ",
+              ";      x" + row + " = ",
               result.map(r=>span(r.map(_.apply(row-1).toString)))
             )
           )

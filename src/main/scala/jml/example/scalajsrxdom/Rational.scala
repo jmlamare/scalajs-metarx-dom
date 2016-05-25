@@ -18,7 +18,7 @@ object Rational {
     def minus(x: Rational, y: Rational): Rational = Rational(x.numer*y.denum - y.numer*x.denum, x.denum * y.denum)
     def times(x: Rational, y: Rational): Rational = Rational(x.numer*y.numer, x.denum * y.denum)
     def div(x: Rational, y: Rational): Rational = Rational(x.numer*y.denum, x.denum * y.numer)
-    def negate(x: Rational): Rational = Rational(-x.numer, -x.denum)
+    def negate(x: Rational): Rational = Rational(-x.numer, x.denum)
     def fromInt(x: Int): Rational = Rational(x)
     def toInt(x: Rational): Int = x.numer.toInt / x.denum.toInt
     def toLong(x: Rational): Long = x.numer.toLong / x.denum.toLong
@@ -26,9 +26,10 @@ object Rational {
     def toDouble(x: Rational): Double = x.numer.toDouble / x.denum.toDouble
   }
 
-  private [Rational] val Parser = "([0-9]+)\\(/([0-9]+)\\)?".r
+  private [Rational] val Parser = "(-?[0-9]+)(/([0-9]+))?".r
   def unapply(s: String): Option[Rational] = s match {
-    case Parser(numer, denum) => Some(Rational(numer.toInt, denum.toInt))
+    case Parser(numer, null, null) => Some(Rational(numer.toInt))
+    case Parser(numer, middle, denum) => Some(Rational(numer.toInt, denum.toInt))
     case _ => None
   }
 }
