@@ -69,14 +69,11 @@ object Scalajsrxdom extends js.JSApp {
 
   def lup[T](b:Array[Array[T]])(implicit frac: scala.math.Fractional[T], tag: scala.reflect.ClassTag[T]): Option[(Array[Array[T]], Array[Int])] = {
     import frac._
-    b.map(x=>println(x.mkString(",")))
-    println("--")
     val perm: Array[Int] = (0 to b.length-1).toArray
     def get(lin:Int, col:Int): T = b(perm(lin))(col)
     def set(lin:Int, col:Int, cell:T) = b(perm(lin))(col) = cell
     for(pos<-0 to b.length-2) {
-      val max:Int = Range(pos, b.length-1).maxBy(get(_,pos))
-      println(pos + "->" + max)
+      val max:Int = Range(pos, b.length).reduce((a,b)=>if(get(a, pos).abs()<get(b, pos).abs()) b else a)
       val (rp,rm) = (perm(pos), perm(max))
       perm(pos)=rm
       perm(max)=rp
@@ -86,7 +83,7 @@ object Scalajsrxdom extends js.JSApp {
         for(c<-pos+1 to b.length-1) set(r, c, get(r, c) - get(r, pos) * get(pos, c))
       }
     }
-    return if( frac.compare(get(b.length-1, b.length-1),frac.zero)==0 ) None else Some(b, perm)
+    return if( frac.compare(get(b.length-1, b.length-1),frac.zero)==0 ) None else Some((b, perm))
   }
    
   def solve[T](a:Array[Array[T]], b:Array[T])(implicit frac: scala.math.Fractional[T], tag: scala.reflect.ClassTag[T]): Option[Array[T]] = lup(a) match {
@@ -94,8 +91,8 @@ object Scalajsrxdom extends js.JSApp {
       import frac._
       val y = Array.fill(b.length)(frac.zero)
       val x = Array.fill(b.length)(frac.zero)
-      for(i <- Range(0,b.length)) y(i) = b(p(i)) - Range(0,i).map(j=>lu(i)(j) * y(j)).sum
-      for(i <- b.length-1 to 0 by -1) x(i) = (y(i) - Range(i+1,b.length).map(j=>lu(i)(j) * x(j)).sum) / lu(i)(i)
+      for(i <- Range(0,b.length)) y(i) = b(p(i)) - Range(0,i).map(j=>lu(p(i))(j) * y(j)).sum
+      for(i <- b.length-1 to 0 by -1) x(i) = (y(i) - Range(i+1,b.length).map(j=>lu(p(i))(j) * x(j)).sum) / lu(p(i))(i)
       return Some(x)
     }
     case _ => return None
@@ -103,7 +100,7 @@ object Scalajsrxdom extends js.JSApp {
  
   def main(): Unit = {
     val list = Buffer(1,2,2,3)
-    val size = Var[Int](3)
+    val size = Var[Int](2)
     
     dom.document.body.appendChild( div(
       /*
@@ -167,7 +164,7 @@ object Scalajsrxdom extends js.JSApp {
             (1 to size).map(col=>
               td( display:="inline-block",
                 input(
-                  width:="40px",
+                  width:="50px",
                   value:=matrix.get.apply((row,col)).toString,
                   onchange:=handler(matrix, (row,col))
                 ),
@@ -176,7 +173,7 @@ object Scalajsrxdom extends js.JSApp {
             ),
             td( display:="inline-block",
               input( 
-                width:="40px",
+                width:="50px",
                 value:=vector.get.apply(row).toString,
                 onchange:=handler(vector, row)
               )
